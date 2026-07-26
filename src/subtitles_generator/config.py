@@ -16,6 +16,15 @@ MODEL_NAMES = {
     "tiny": "openai/whisper-tiny",
 }
 
+# Distil-Whisper checkpoints (as of distil-large-v3 / v3.5) are
+# English-only despite accepting a `language=` argument without
+# complaint: passing a non-English language silently produces English
+# output instead of raising an error. See
+# https://huggingface.co/distil-whisper/distil-large-v3/discussions/2
+# We validate against this explicitly in main.py so it fails fast
+# instead of quietly mistranscribing.
+ENGLISH_ONLY_MODEL_SIZES = {"large-distil"}
+
 # Media containers that ffmpeg (used internally by the ASR pipeline)
 # can demux. Video files are supported directly: ffmpeg extracts the
 # audio track on the fly, so we never need to create an intermediate
@@ -48,7 +57,7 @@ SUPPORTED_LANGUAGES = [
     "hausa", "bashkir", "javanese", "sundanese",
 ]
 
-# Default chunking / decoding parameters, still overridable from the CLI.
+# Default chunking parameter, still overridable from the CLI. 30s matches
+# Whisper's native context window.
 DEFAULT_CHUNK_LENGTH_S = 30
-DEFAULT_BATCH_SIZE = 8
 SUBTITLE_LINE_WIDTH = 42  # standard-ish subtitle line width, in characters

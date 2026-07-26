@@ -4,3 +4,5 @@
 # Outside Colab, install torch yourself first: https://pytorch.org
 transformers>=4.41
 accelerate>=0.30
+numpy
+tqdm

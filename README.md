@@ -31,7 +31,8 @@ Arguments:
 | `--lang` | no | `auto` | language spoken (e.g. `english`, `german`, `french`, ... see below), or `auto` to detect it |
 | `--output_file` | no | `<input_file>.srt` | where to write the subtitles |
 | `--chunk_length_s` | no | `30` | seconds per audio chunk fed to the model |
-| `--batch_size` | no | `8` | chunks transcribed per batch — lower this if you run out of memory on CPU/small GPU |
+
+> ⚠️ **`large-distil` (`distil-whisper/distil-large-v3`) is English-only.** Despite accepting a `--lang` value for any language without erroring, it silently produces English output for non-English audio — this is a known limitation of the Distil-Whisper checkpoints themselves, not something specific to this tool. `main.py` refuses this combination and raises an error instead of quietly mistranscribing; if you're transcribing non-English audio, use `large`, `medium`, `small`, `base`, or `tiny` instead.
 
 The `.srt` file is written next to the input file unless `--output_file` is given. Video files (`.mp4`, `.avi`, `.webm`, `.mov`, `.mkv`) are read directly — there's no intermediate audio-extraction step, ffmpeg handles that internally.
 
@@ -69,3 +70,5 @@ hawaiian, lingala, hausa, bashkir, javanese, sundanese
 - Video files are transcribed directly (ffmpeg extracts audio internally); no more writing a temporary `.wav` next to your input, and no more risk of that cleanup step deleting your original file.
 - Dropped Hydra/OmegaConf/moviepy/librosa — fewer dependencies, fewer version conflicts, especially on Colab.
 - Long subtitle lines are wrapped instead of truncated at 250 characters.
+- Real progress bar (`tqdm`) over the audio duration while transcribing, instead of a silent wait.
+- Chunking is done manually in fixed 30s windows (Whisper's native context length) instead of via the pipeline's own `chunk_length_s`, which `transformers` itself flags as experimental for Whisper — this also gets rid of that warning, plus a couple of other benign but noisy log lines that are now suppressed.

@@ -14,6 +14,18 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(message)s")
 
 
+def validate_model_lang_combo(model_size: str, lang: str) -> None:
+    """Raise ValueError if an English-only model is paired with another language."""
+    if model_size in config.ENGLISH_ONLY_MODEL_SIZES and lang not in ("english", "auto"):
+        raise ValueError(
+            f"Model size '{model_size}' ({config.MODEL_NAMES[model_size]}) is "
+            f"English-only: it accepts --lang without erroring but silently produces "
+            f"English output for any other language. Use --lang english/auto with this "
+            f"model, or pick a multilingual model size (large, medium, small, base, tiny) "
+            f"for '{lang}'."
+        )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate subtitles (.srt) from a video or audio file."
@@ -36,11 +48,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--chunk_length_s", type=int, default=config.DEFAULT_CHUNK_LENGTH_S,
-        help="Length in seconds of the audio chunks fed to the model.",
-    )
-    parser.add_argument(
-        "--batch_size", type=int, default=config.DEFAULT_BATCH_SIZE,
-        help="Number of chunks transcribed per batch (lower this on CPU/low-VRAM).",
+        help="Length in seconds of the audio windows fed to the model one at a time "
+             "(30s is Whisper's native window; lower it if you run out of memory).",
     )
 
     args = parser.parse_args()
@@ -59,6 +68,7 @@ def parse_args() -> argparse.Namespace:
     args.output_file = (
         Path(args.output_file) if args.output_file else input_file.with_suffix(".srt")
     )
+    validate_model_lang_combo(args.model_size, args.lang)
     return args
 
 
@@ -69,7 +79,6 @@ def app() -> None:
         config.MODEL_NAMES[args.model_size],
         lang=args.lang,
         chunk_length_s=args.chunk_length_s,
-        batch_size=args.batch_size,
     )
 
     logger.info("Generating subtitles...")
