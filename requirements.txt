@@ -1,0 +1,6 @@
+# No pin on torch: in Google Colab it's already installed with the
+# right CUDA build. Installing/pinning it here would force pip to
+# reinstall it and can break the CUDA setup.
+# Outside Colab, install torch yourself first: https://pytorch.org
+transformers>=4.41
+accelerate>=0.30

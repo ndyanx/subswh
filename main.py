@@ -1,0 +1,83 @@
+import argparse
+import logging
+import sys
+import warnings
+from pathlib import Path
+
+warnings.filterwarnings("ignore")
+
+from subtitles_generator import config
+from subtitles_generator.core import Model
+from subtitles_generator.utils import create_srt
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(message)s")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Generate subtitles (.srt) from a video or audio file."
+    )
+    parser.add_argument(
+        "--model_size", type=str, default="medium", choices=list(config.MODEL_NAMES),
+        help="Whisper model size to use.",
+    )
+    parser.add_argument(
+        "--lang", type=str, default="auto", choices=config.SUPPORTED_LANGUAGES,
+        help="Language spoken in the audio/video, or 'auto' to auto-detect.",
+    )
+    parser.add_argument(
+        "--input_file", type=str, required=True,
+        help="Path to an audio or video file.",
+    )
+    parser.add_argument(
+        "--output_file", type=str, default=None,
+        help="Path to the resulting .srt file (defaults to <input_file>.srt).",
+    )
+    parser.add_argument(
+        "--chunk_length_s", type=int, default=config.DEFAULT_CHUNK_LENGTH_S,
+        help="Length in seconds of the audio chunks fed to the model.",
+    )
+    parser.add_argument(
+        "--batch_size", type=int, default=config.DEFAULT_BATCH_SIZE,
+        help="Number of chunks transcribed per batch (lower this on CPU/low-VRAM).",
+    )
+
+    args = parser.parse_args()
+
+    input_file = Path(args.input_file)
+    if not input_file.is_file():
+        raise FileNotFoundError(f"Input file {input_file} does not exist")
+
+    supported = config.SUPPORTED_MEDIA_FORMATS["video"] + config.SUPPORTED_MEDIA_FORMATS["audio"]
+    if input_file.suffix.lower() not in supported:
+        raise ValueError(
+            f"Unsupported file extension '{input_file.suffix}'. Supported: {supported}"
+        )
+
+    args.input_file = input_file
+    args.output_file = (
+        Path(args.output_file) if args.output_file else input_file.with_suffix(".srt")
+    )
+    return args
+
+
+def app() -> None:
+    args = parse_args()
+
+    model = Model(
+        config.MODEL_NAMES[args.model_size],
+        lang=args.lang,
+        chunk_length_s=args.chunk_length_s,
+        batch_size=args.batch_size,
+    )
+
+    logger.info("Generating subtitles...")
+    chunks = model.transcribe(args.input_file)
+
+    n_frames = create_srt(args.output_file, chunks)
+    logger.info(f"Wrote {n_frames} subtitle frames to {args.output_file}")
+
+
+if __name__ == "__main__":
+    app()
