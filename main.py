@@ -48,8 +48,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--chunk_length_s", type=int, default=config.DEFAULT_CHUNK_LENGTH_S,
-        help="Length in seconds of the audio windows fed to the model one at a time "
-             "(30s is Whisper's native window; lower it if you run out of memory).",
+        help="Length in seconds of each audio window (30s is Whisper's native window).",
+    )
+    parser.add_argument(
+        "--batch_size", type=int, default=config.DEFAULT_BATCH_SIZE,
+        help="Number of windows transcribed together per GPU forward pass. Raise this "
+             "if your GPU RAM usage is low (check Colab's resource panel); lower it if "
+             "you hit an out-of-memory error.",
     )
 
     args = parser.parse_args()
@@ -82,7 +87,7 @@ def app() -> None:
     )
 
     logger.info("Generating subtitles...")
-    chunks = model.transcribe(args.input_file)
+    chunks = model.transcribe(args.input_file, batch_size=args.batch_size)
 
     n_frames = create_srt(args.output_file, chunks)
     logger.info(f"Wrote {n_frames} subtitle frames to {args.output_file}")

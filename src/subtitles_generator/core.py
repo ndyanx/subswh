@@ -39,15 +39,13 @@ class Model:
     long-form chunking (which `transformers` itself flags as "very
     experimental" for seq2seq models like Whisper, recommending
     `generate()`'s own chunking instead), we do our own fixed-window
-    chunking at exactly Whisper's native 30s context length. Each
-    window is transcribed as a normal, non-chunked, single-window
-    inference call, so:
-      * we avoid the experimental-chunking warning entirely, since we
-        never ask the pipeline to chunk internally.
-      * we get a real per-window progress bar (tqdm), instead of one
-        opaque call that only prints a result once everything is done.
-      * we can offset each window's local timestamps back into
-        absolute time ourselves, in a way we fully control and can test.
+    chunking at exactly Whisper's native 30s context length, and feed
+    those windows to the pipeline as a batched generator so multiple
+    windows run through the GPU in the same forward pass instead of
+    one at a time. This matters a lot in practice: on a typical Colab
+    GPU, `medium`/`large` only use a few GB of the available VRAM per
+    window, so processing one window at a time leaves most of the GPU
+    idle between batches. `batch_size` lets you use that headroom.
     """
 
     def __init__(
@@ -95,25 +93,39 @@ class Model:
             device=device,
             return_timestamps=True,
             generate_kwargs=generate_kwargs,
+            # Reduces peak system RAM while the model weights are loaded
+            # (materializes the model without an extra full-precision
+            # copy in CPU memory first). Doesn't affect GPU RAM.
+            model_kwargs={"low_cpu_mem_usage": True},
         )
 
-    def transcribe(self, media_path: Union[str, Path]) -> List[SubtitleChunk]:
+    def transcribe(self, media_path: Union[str, Path], batch_size: int = 4) -> List[SubtitleChunk]:
         """Transcribe an audio or video file and return timed chunks.
 
-        Shows a tqdm progress bar over the audio's duration while it runs.
-        `end` can be `None` for the very last sub-chunk of the whole file
-        if the model didn't emit a closing timestamp; callers should
-        handle that case (create_srt already does).
+        `batch_size` windows are sent through the model together per
+        forward pass. Raise it while you still have free GPU RAM (check
+        `nvidia-smi` / Colab's resource panel) for faster transcription;
+        lower it if you hit an out-of-memory error. `batch_size=1` is
+        equivalent to the old one-window-at-a-time behavior.
+
+        Shows a tqdm progress bar over the number of windows while it
+        runs. `end` can be `None` for the very last sub-chunk of the
+        whole file if the model didn't emit a closing timestamp;
+        callers should handle that case (create_srt already does).
         """
         from tqdm import tqdm
 
         audio = load_audio(media_path, sampling_rate=SAMPLING_RATE)
-        total_seconds = audio.shape[0] / SAMPLING_RATE
+        windows = list(iter_windows(audio, self.chunk_length_s, SAMPLING_RATE))
+
+        def window_stream():
+            for window, _offset_s in windows:
+                yield {"raw": window, "sampling_rate": SAMPLING_RATE}
 
         chunks: List[SubtitleChunk] = []
-        with tqdm(total=round(total_seconds, 1), unit="s", desc="Transcribing") as bar:
-            for window, offset_s in iter_windows(audio, self.chunk_length_s, SAMPLING_RATE):
-                result = self.pipe({"raw": window, "sampling_rate": SAMPLING_RATE})
+        results = self.pipe(window_stream(), batch_size=batch_size)
+        with tqdm(total=len(windows), unit="chunk", desc="Transcribing") as bar:
+            for (_window, offset_s), result in zip(windows, results):
                 for c in result.get("chunks", []):
                     start, end = c["timestamp"]
                     text = c["text"].strip()
@@ -124,6 +136,6 @@ class Model:
                         "start": start + offset_s,
                         "end": (end + offset_s) if end is not None else None,
                     })
-                bar.update(round(window.shape[0] / SAMPLING_RATE, 1))
+                bar.update(1)
 
         return chunks

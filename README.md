@@ -30,7 +30,12 @@ Arguments:
 | `--model_size` | no | `medium` | `tiny`, `base`, `small`, `medium`, `large`, `large-distil` — larger is more accurate but slower |
 | `--lang` | no | `auto` | language spoken (e.g. `english`, `german`, `french`, ... see below), or `auto` to detect it |
 | `--output_file` | no | `<input_file>.srt` | where to write the subtitles |
-| `--chunk_length_s` | no | `30` | seconds per audio chunk fed to the model |
+| `--chunk_length_s` | no | `30` | seconds per audio window |
+| `--batch_size` | no | `4` | windows transcribed together per GPU forward pass — see below |
+
+### Tuning `--batch_size`
+
+Windows are processed in batches on the GPU. If Colab's resource panel shows low GPU RAM usage (e.g. 2-3 GB used out of 15 GB on a T4) while transcribing, you have headroom — raise `--batch_size` (try 8, 16...) for meaningfully faster transcription. If you hit a CUDA out-of-memory error, lower it. `--batch_size 1` reproduces the old one-window-at-a-time behavior.
 
 > ⚠️ **`large-distil` (`distil-whisper/distil-large-v3`) is English-only.** Despite accepting a `--lang` value for any language without erroring, it silently produces English output for non-English audio — this is a known limitation of the Distil-Whisper checkpoints themselves, not something specific to this tool. `main.py` refuses this combination and raises an error instead of quietly mistranscribing; if you're transcribing non-English audio, use `large`, `medium`, `small`, `base`, or `tiny` instead.
 

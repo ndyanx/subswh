@@ -60,4 +60,7 @@ SUPPORTED_LANGUAGES = [
 # Default chunking parameter, still overridable from the CLI. 30s matches
 # Whisper's native context window.
 DEFAULT_CHUNK_LENGTH_S = 30
+# Conservative default that fits comfortably even on a T4-class GPU with
+# the `medium`/`large` models. Raise it if your GPU RAM usage looks low.
+DEFAULT_BATCH_SIZE = 4
 SUBTITLE_LINE_WIDTH = 42  # standard-ish subtitle line width, in characters
